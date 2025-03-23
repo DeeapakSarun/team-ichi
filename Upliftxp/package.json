@@ -20,6 +20,7 @@
     "expo": "~52.0.40",
     "expo-constants": "^17.0.8",
     "expo-device": "^7.0.2",
+    "expo-location": "^18.0.8",
     "expo-notifications": "^0.29.14",
     "expo-sensors": "^14.0.2",
     "expo-status-bar": "~2.0.1",

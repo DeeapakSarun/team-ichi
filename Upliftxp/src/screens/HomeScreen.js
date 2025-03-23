@@ -7,12 +7,13 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
-import { Text, Surface, ProgressBar, Card, Button } from 'react-native-paper';
+import { Text, Surface, ProgressBar, Card, Button, IconButton, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
- import { stepService } from '../services/stepService';
-import { StepCounter } from './StepCounter';
+import { stepService } from '../services/stepService';
+import * as Location from 'expo-location';
 import { getCurrentUser, getUserProfile } from '../services/authService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -21,8 +22,8 @@ import { useUser } from '../context/UserContext';
 const HomeScreen = ({ navigation }) => {
   const { userData, loading, updateUserData } = useUser();
   const [refreshing, setRefreshing] = useState(false);
-  const [stepCount, setStepCount] = useState(0);
   const [steps, setSteps] = useState(0);
+  const [distance, setDistance] = useState(0);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
   const [nextLevelXp, setNextLevelXp] = useState(1000);
@@ -30,6 +31,13 @@ const HomeScreen = ({ navigation }) => {
   const [mentalHealthTips, setMentalHealthTips] = useState('');
   const [loadingTips, setLoadingTips] = useState(false);
   const [testScores, setTestScores] = useState({});
+  const [sensorPermissionStatus, setSensorPermissionStatus] = useState({
+    accelerometer: false,
+    location: false
+  });
+  
+  // Distance goal in meters
+  const distanceGoal = 20;
 
   useEffect(() => {
     initializeUser();
@@ -37,16 +45,6 @@ const HomeScreen = ({ navigation }) => {
       stepService.stopTracking();
     };
   }, []);
-  const updateStepCount = (newCount) => {
-    setStepCount(newCount); // Update the step count state
-  };
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      updateUserData();
-    });
-
-    return unsubscribe;
-  }, [navigation]);
 
   const initializeUser = async () => {
     try {
@@ -62,12 +60,73 @@ const HomeScreen = ({ navigation }) => {
           setLevel(currentLevel);
           setNextLevelXp(nextLevelXp);
           setTestScores(userProfile.mentalHealthTests || {});
+          setSteps(userProfile.dailySteps || 0);
+          setDistance(userProfile.dailyDistance || 0);
           await generateMentalHealthTips(userProfile.mentalHealthTests || {});
         }
+        
+        // Start step tracking with user ID
         stepService.startTracking(user.uid);
+        
+        // Setup an interval to update step count and distance in UI
+        const updateInterval = setInterval(() => {
+          setSteps(stepService.getSteps());
+          setDistance(stepService.getDistance());
+        }, 1000);
+        
+        // Clean up interval on component unmount
+        return () => clearInterval(updateInterval);
       }
     } catch (error) {
       console.error('Error initializing user:', error);
+    }
+  };
+
+  const requestAccelerometerPermission = async () => {
+    const hasPermission = await stepService.requestAccelerometerPermission();
+    setSensorPermissionStatus(prev => ({
+      ...prev,
+      accelerometer: hasPermission
+    }));
+    
+    if (hasPermission && userId) {
+      // Restart tracking to apply new permissions
+      stepService.stopTracking();
+      stepService.startTracking(userId);
+    }
+  };
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      const hasPermission = status === 'granted';
+      setSensorPermissionStatus(prev => ({
+        ...prev,
+        location: hasPermission
+      }));
+      
+      if (hasPermission) {
+        Alert.alert(
+          'Permission Granted',
+          'Location access will help improve step counting accuracy.',
+          [{ text: 'OK' }]
+        );
+        
+        // Restart step tracking with location
+        if (userId) {
+          stepService.stopTracking();
+          stepService.startTracking(userId);
+        }
+      } else {
+        Alert.alert(
+          'Permission Denied',
+          'Step counting will be less accurate without location access.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
     }
   };
 
@@ -158,6 +217,7 @@ const HomeScreen = ({ navigation }) => {
           setLevel(currentLevel);
           setNextLevelXp(nextLevelXp);
           setSteps(userProfile.dailySteps || 0);
+          setDistance(userProfile.dailyDistance || 0);
           setTestScores(userProfile.mentalHealthTests || {});
           await generateMentalHealthTips(userProfile.mentalHealthTests || {});
         }
@@ -262,19 +322,6 @@ const HomeScreen = ({ navigation }) => {
           <Card style={styles.statsCard}>
             <Card.Content>
               <View style={styles.statsRow}>
-                <MaterialCommunityIcons name="walk" size={24} color="#000" />
-                <View style={styles.statsTextContainer}>
-                  <StepCounter onStepCountUpdate={updateStepCount} />
-                  <Text style={styles.statsLabel}>Steps Today</Text>
-                </View>
-                
-              </View>
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.statsCard}>
-            <Card.Content>
-              <View style={styles.statsRow}>
                 <MaterialCommunityIcons name="star" size={24} color="#000" />
                 <View style={styles.statsTextContainer}>
                   <Text style={styles.statsValue}>{xp}</Text>
@@ -283,7 +330,91 @@ const HomeScreen = ({ navigation }) => {
               </View>
             </Card.Content>
           </Card>
+          
+          <Card style={styles.statsCard}>
+            <Card.Content>
+              <View style={styles.statsRow}>
+                <MaterialCommunityIcons name="trophy" size={24} color="#000" />
+                <View style={styles.statsTextContainer}>
+                  <Text style={styles.statsValue}>{userData.streak || 0}</Text>
+                  <Text style={styles.statsLabel}>Day Streak</Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
         </View>
+        
+        {/* Distance Section (formerly Steps) */}
+        <Surface style={styles.stepsContainer}>
+          <View style={styles.stepsHeader}>
+            <Text style={styles.stepsTitle}>Distance Traveled</Text>
+            <View style={styles.permissionButtons}>
+              <IconButton
+                icon="motion-sensor"
+                size={20}
+                onPress={requestAccelerometerPermission}
+                style={styles.sensorButton}
+                iconColor="#4CAF50"
+              />
+              <IconButton
+                icon="map-marker"
+                size={20}
+                onPress={requestLocationPermission}
+                style={styles.locationButton}
+                iconColor="#4CAF50"
+              />
+            </View>
+          </View>
+          
+          <View style={styles.stepsCountContainer}>
+            <MaterialCommunityIcons name="map-marker-distance" size={40} color="#4CAF50" />
+            <Text style={styles.stepsCount}>{distance.toFixed(2)} m</Text>
+            <Text style={styles.stepsGoal}>Goal: {distanceGoal} meters</Text>
+          </View>
+          
+          <View style={styles.stepsProgressContainer}>
+            <ProgressBar
+              progress={Math.min(distance / distanceGoal, 1)}
+              color="#4CAF50"
+              style={styles.stepsProgressBar}
+            />
+            <Text style={styles.stepsProgressText}>
+              {Math.round((distance / distanceGoal) * 100)}% Complete
+            </Text>
+          </View>
+          
+          <Divider style={styles.divider} />
+          
+          <View style={styles.permissionsInfo}>
+            <Text style={styles.permissionsTitle}>Sensor Permissions:</Text>
+            <View style={styles.permissionItem}>
+              <MaterialCommunityIcons 
+                name="motion-sensor" 
+                size={16} 
+                color={sensorPermissionStatus.accelerometer ? "#4CAF50" : "#999"} 
+              />
+              <Text style={[
+                styles.permissionText, 
+                {color: sensorPermissionStatus.accelerometer ? "#4CAF50" : "#999"}
+              ]}>
+                Motion Sensors: {sensorPermissionStatus.accelerometer ? "Granted" : "Required"}
+              </Text>
+            </View>
+            <View style={styles.permissionItem}>
+              <MaterialCommunityIcons 
+                name="map-marker" 
+                size={16} 
+                color={sensorPermissionStatus.location ? "#4CAF50" : "#999"} 
+              />
+              <Text style={[
+                styles.permissionText, 
+                {color: sensorPermissionStatus.location ? "#4CAF50" : "#666"}
+              ]}>
+                Location: {sensorPermissionStatus.location ? "Granted" : "Optional - Improves accuracy"}
+              </Text>
+            </View>
+          </View>
+        </Surface>
 
         {/* Mental Health Tips Section */}
         <View style={styles.sectionContainer}>
@@ -458,6 +589,78 @@ const styles = StyleSheet.create({
   },
   featureButton: {
     backgroundColor: '#000',
+  },
+  stepsContainer: {
+    margin: 16,
+    padding: 16,
+    elevation: 4,
+    borderRadius: 8,
+  },
+  stepsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  stepsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+  },
+  sensorButton: {
+    margin: 0,
+  },
+  locationButton: {
+    margin: 0,
+  },
+  stepsCountContainer: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  stepsCount: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginVertical: 8,
+  },
+  stepsGoal: {
+    fontSize: 14,
+    color: '#666',
+  },
+  stepsProgressContainer: {
+    marginBottom: 12,
+  },
+  stepsProgressBar: {
+    height: 10,
+    borderRadius: 5,
+    marginBottom: 4,
+  },
+  stepsProgressText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  divider: {
+    marginVertical: 12,
+  },
+  permissionsInfo: {
+    marginTop: 4,
+  },
+  permissionsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  permissionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  permissionText: {
+    fontSize: 12,
+    marginLeft: 8,
   },
 });
 
