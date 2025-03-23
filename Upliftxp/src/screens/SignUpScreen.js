@@ -4,6 +4,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Image,
   TouchableOpacity,
   ScrollView,
   Alert,
@@ -56,8 +57,7 @@ const SignUpScreen = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>UpliftXP</Text>
-            <Text style={styles.tagline}>Start your health journey</Text>
+              <Image source={require('../../assets/image.png')} style={styles.image} />
           </View>
 
           <Surface style={styles.formContainer}>
@@ -151,6 +151,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 50,
+  },
+    image: {
+  
+  mixBlendMode: 'difference',
+  width: 150,
+  height: 150,
+  resizeMode: 'contain',
+  alignSelf: 'center',
+  marginBottom: 20,
   },
   logoText: {
     fontSize: 42,

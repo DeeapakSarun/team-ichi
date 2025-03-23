@@ -218,6 +218,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   submitButton: {
+    fontSize: 'small',
     backgroundColor: '#000',
   },
   topicsGrid: {

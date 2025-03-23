@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { TextInput, Button, Text, Surface } from 'react-native-paper';
+import { TextInput, Button, Text, Surface, Avatar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '../services/authService';
+
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -41,12 +42,14 @@ const LoginScreen = ({ navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>UpliftXP</Text>
-          <Text style={styles.tagline}>Level up your health journey</Text>
-        </View>
+        
+      <View style={styles.logoContainer}>
+          <Image source={require('../../assets/image.png')} style={styles.image} />
+      </View>
+
 
         <Surface style={styles.formContainer}>
+
           <TextInput
             label="Email"
             value={email}
@@ -108,7 +111,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: 30,
   },
   logoText: {
     fontSize: 42,
@@ -122,13 +125,23 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: 20,
-    margin: 20,
+    margin:20,
     borderRadius: 10,
     elevation: 4,
   },
   input: {
     marginBottom: 15,
   },
+  image: {
+  
+  mixBlendMode: 'difference',
+  width: 250,
+  height: 250,
+  resizeMode: 'contain',
+  alignSelf: 'center',
+  marginBottom: 20,
+  },
+
   button: {
     marginTop: 10,
     paddingVertical: 8,
