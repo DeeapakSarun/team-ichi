@@ -11,7 +11,8 @@ import {
 import { Text, Surface, ProgressBar, Card, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { stepService } from '../services/stepService';
+// import { stepService } from '../services/stepService';
+import { StepCounter } from './StepCounter';
 import { getCurrentUser, getUserProfile } from '../services/authService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -20,7 +21,8 @@ import { useUser } from '../context/UserContext';
 const HomeScreen = ({ navigation }) => {
   const { userData, loading, updateUserData } = useUser();
   const [refreshing, setRefreshing] = useState(false);
-  const [steps, setSteps] = useState(0);
+  const [stepCount, setStepCount] = useState(0);
+  // const [steps, setSteps] = useState(0);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
   const [nextLevelXp, setNextLevelXp] = useState(1000);
@@ -29,13 +31,15 @@ const HomeScreen = ({ navigation }) => {
   const [loadingTips, setLoadingTips] = useState(false);
   const [testScores, setTestScores] = useState({});
 
-  useEffect(() => {
-    initializeUser();
-    return () => {
-      stepService.stopTracking();
-    };
-  }, []);
-
+  // useEffect(() => {
+  //   initializeUser();
+  //   return () => {
+  //     stepService.stopTracking();
+  //   };
+  // }, []);
+  const updateStepCount = (newCount) => {
+    setStepCount(newCount); // Update the step count state
+  };
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       updateUserData();
@@ -260,9 +264,10 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.statsRow}>
                 <MaterialCommunityIcons name="walk" size={24} color="#000" />
                 <View style={styles.statsTextContainer}>
-                  <Text style={styles.statsValue}>{steps}</Text>
+                  <StepCounter onStepCountUpdate={updateStepCount} />
                   <Text style={styles.statsLabel}>Steps Today</Text>
                 </View>
+                
               </View>
             </Card.Content>
           </Card>
