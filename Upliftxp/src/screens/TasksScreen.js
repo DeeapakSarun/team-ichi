@@ -186,17 +186,25 @@ const TasksScreen = () => {
           const currentXP = data.xp || 0;
           const newXP = Math.max(0, currentXP + xpChange);
           
+          // If task is completed, remove it from penalty tasks
+          let updatedPenaltyTasks = [...penaltyTasks];
+          if (isCompleted) {
+            updatedPenaltyTasks = penaltyTasks.filter(t => t.id !== taskId);
+          }
+          
           // Update Firestore
           await updateDoc(userRef, {
             completedPenaltyTasks: newCompletedPenaltyTasks,
+            penaltyTasks: updatedPenaltyTasks,
             xp: newXP,
           });
           
           // Update local state
           setCompletedPenaltyTasks(newCompletedPenaltyTasks);
+          setPenaltyTasks(updatedPenaltyTasks);
           updateUserData({ xp: newXP });
         }
-      }
+            }
     } catch (error) {
       console.error('Error updating task:', error);
       Alert.alert('Error', 'Failed to update task');
