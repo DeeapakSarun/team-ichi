@@ -30,7 +30,7 @@ const allDailyTasks = [
   { id: 'clean', title: '🧹 Clean your space', xp: 20 },
 ];
 
-const ProfileScreen = () => {
+const ProfileScreen = ({ navigation }) => {
   const { userData, loading, refreshUserData, updateUserData } = useUser();
   const [devMode, setDevMode] = useState(false);
   const [showDateDialog, setShowDateDialog] = useState(false);
@@ -256,7 +256,7 @@ const ProfileScreen = () => {
           <List.Item
             title="Help Center"
             left={props => <List.Icon {...props} icon="help-circle" />}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('HelpCenter')}
           />
           <List.Item
             title="Contact Us"

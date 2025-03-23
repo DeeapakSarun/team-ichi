@@ -16,6 +16,7 @@ import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MentalHealthScreen from '../screens/MentalHealthScreen';
 import DietaryPlanScreen from '../screens/DietaryPlanScreen';
+import HelpCenterScreen from '../screens/HelpCenterScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -109,6 +110,7 @@ const AppNavigator = () => {
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="MentalHealth" component={MentalHealthScreen} />
             <Stack.Screen name="DietaryPlan" component={DietaryPlanScreen} />
+            <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
           </>
         )}
       </Stack.Navigator>
