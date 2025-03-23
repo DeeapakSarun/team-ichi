@@ -174,26 +174,26 @@ const TasksScreen = () => {
           setCompletedTasks(newCompletedTasks);
           updateUserData({ xp: newXP });
         } 
-        // For penalty tasks, if completed remove them entirely
-        else if (isCompleted) {
-          // Calculate XP gain
-          const xpChange = task.xp;
-          const currentXP = data.xp || 0;
-          const newXP = currentXP + xpChange;
+        // For penalty tasks, update completed status but don't remove them
+        else {
+          const newCompletedPenaltyTasks = {
+            ...completedPenaltyTasks,
+            [taskId]: isCompleted
+          };
           
-          // Remove the completed penalty task
-          const updatedPenaltyTasks = data.penaltyTasks.filter(
-            penaltyTask => penaltyTask.id !== taskId
-          );
+          // Calculate XP gain
+          const xpChange = isCompleted ? task.xp : -task.xp;
+          const currentXP = data.xp || 0;
+          const newXP = Math.max(0, currentXP + xpChange);
           
           // Update Firestore
           await updateDoc(userRef, {
-            penaltyTasks: updatedPenaltyTasks,
+            completedPenaltyTasks: newCompletedPenaltyTasks,
             xp: newXP,
           });
           
           // Update local state
-          setPenaltyTasks(updatedPenaltyTasks);
+          setCompletedPenaltyTasks(newCompletedPenaltyTasks);
           updateUserData({ xp: newXP });
         }
       }
@@ -213,7 +213,7 @@ const TasksScreen = () => {
     );
   }
 
-  // Check if all daily tasks are completed - hide penalty section if so
+  // Check if all daily tasks are completed - we'll use this for streak calculation but not to hide penalties
   const allTasksCompleted = dailyTasks.length > 0 && 
     dailyTasks.every(task => completedTasks[task.id]);
 
@@ -260,9 +260,8 @@ const TasksScreen = () => {
           ))}
         </Surface>
 
-        {/* Penalty Tasks Section - Only show if there are active penalty tasks AND not all daily tasks are completed */}
-        {penaltyTasks.length > 0 && 
-          !(dailyTasks.length > 0 && dailyTasks.every(task => completedTasks[task.id])) && (
+        {/* Penalty Tasks Section - Always show if there are penalty tasks */}
+        {penaltyTasks.length > 0 && (
           <Surface style={[styles.section, styles.penaltySection]}>
             <Text style={styles.sectionTitle}>Penalty Tasks</Text>
             <Text style={styles.penaltySubtitle}>Complete these tasks to make up for missed daily tasks</Text>
