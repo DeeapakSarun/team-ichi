@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getCurrentUser } from '../services/authService';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
@@ -13,6 +14,8 @@ import HomeScreen from '../screens/HomeScreen';
 import TasksScreen from '../screens/TasksScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import MentalHealthScreen from '../screens/MentalHealthScreen';
+import DietaryPlanScreen from '../screens/DietaryPlanScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -26,7 +29,7 @@ const MainTabs = () => {
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopWidth: 1,
-          borderTopColor: '#eee',
+          borderTopColor: '#e0e0e0',
         },
       }}
     >
@@ -44,7 +47,7 @@ const MainTabs = () => {
         component={TasksScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="checkbox-marked" size={size} color={color} />
+            <MaterialCommunityIcons name="checkbox-marked-circle-outline" size={size} color={color} />
           ),
         }}
       />
@@ -80,7 +83,6 @@ const AppNavigator = () => {
       setIsLoading(false);
     });
 
-    // Cleanup subscription
     return () => unsubscribe();
   }, []);
 
@@ -103,7 +105,11 @@ const AppNavigator = () => {
           </>
         ) : (
           // Main App Stack
-          <Stack.Screen name="MainApp" component={MainTabs} />
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            <Stack.Screen name="MentalHealth" component={MentalHealthScreen} />
+            <Stack.Screen name="DietaryPlan" component={DietaryPlanScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

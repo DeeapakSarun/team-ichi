@@ -4,6 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Text, Surface, ProgressBar, Card, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,14 +15,19 @@ import { stepService } from '../services/stepService';
 import { getCurrentUser, getUserProfile } from '../services/authService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { useUser } from '../context/UserContext';
 
-const HomeScreen = () => {
+const HomeScreen = ({ navigation }) => {
+  const { userData, loading, updateUserData } = useUser();
   const [refreshing, setRefreshing] = useState(false);
   const [steps, setSteps] = useState(0);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
   const [nextLevelXp, setNextLevelXp] = useState(1000);
   const [userId, setUserId] = useState(null);
+  const [mentalHealthTips, setMentalHealthTips] = useState('');
+  const [loadingTips, setLoadingTips] = useState(false);
+  const [testScores, setTestScores] = useState({});
 
   useEffect(() => {
     initializeUser();
@@ -28,6 +36,14 @@ const HomeScreen = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      updateUserData();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   const initializeUser = async () => {
     try {
       const user = await getCurrentUser();
@@ -35,14 +51,93 @@ const HomeScreen = () => {
         setUserId(user.uid);
         const userProfile = await getUserProfile(user.uid);
         if (userProfile) {
+          const currentLevel = calculateLevel(userProfile.xp);
+          const nextLevelXp = getNextLevelXP(userProfile.xp);
+          
           setXp(userProfile.xp);
-          setLevel(userProfile.level);
-          setNextLevelXp(userProfile.nextLevelXp || 1000);
+          setLevel(currentLevel);
+          setNextLevelXp(nextLevelXp);
+          setTestScores(userProfile.mentalHealthTests || {});
+          await generateMentalHealthTips(userProfile.mentalHealthTests || {});
         }
         stepService.startTracking(user.uid);
       }
     } catch (error) {
       console.error('Error initializing user:', error);
+    }
+  };
+
+  const formatTips = (text) => {
+    // Split the text into sections based on headers or bold text
+    let sections = text.split(/(?=^#+\s+|\*\*)/m);
+
+    // Process each section
+    sections = sections.map(section => {
+      // Handle headers
+      section = section.replace(/^#+\s+(.*)$/m, (match, content) => {
+        return `\n${content.toUpperCase()}\n`;
+      });
+
+      // Handle bold text within paragraphs
+      section = section.replace(/\*\*(.*?)\*\*/g, (match, content) => {
+        return content;
+      });
+
+      // Handle lists (both bullet points and numbers)
+      section = section.replace(/^\s*[-*]\s+(.*)$/gm, (match, content) => {
+        return `\n• ${content}`;
+      });
+      section = section.replace(/^\s*\d+\.\s+(.*)$/gm, (match, content) => {
+        return `\n• ${content}`;
+      });
+
+      // Handle paragraphs
+      section = section.replace(/\n{3,}/g, '\n\n');
+
+      return section.trim();
+    });
+
+    // Join sections with proper spacing
+    return sections.join('\n\n').trim();
+  };
+
+  const generateMentalHealthTips = async (testScores) => {
+    setLoadingTips(true);
+    try {
+      const scores = Object.entries(testScores)
+        .map(([test, data]) => `${test}: ${data.lastScore}%`)
+        .join(', ');
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer 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',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'user',
+              content: `Based on these mental health test scores: ${scores}. Provide 3 personalized tips for improving mental well-being. Format the response with bullet points and keep it concise and actionable.`,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+          top_p: 1,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.choices && data.choices[0]) {
+        const formattedTips = formatTips(data.choices[0].message.content);
+        setMentalHealthTips(formattedTips);
+      }
+    } catch (error) {
+      console.error('Error generating tips:', error);
+      setMentalHealthTips('Unable to generate tips at this time.');
+    } finally {
+      setLoadingTips(false);
     }
   };
 
@@ -52,10 +147,15 @@ const HomeScreen = () => {
       if (userId) {
         const userProfile = await getUserProfile(userId);
         if (userProfile) {
+          const currentLevel = calculateLevel(userProfile.xp);
+          const nextLevelXp = getNextLevelXP(userProfile.xp);
+          
           setXp(userProfile.xp);
-          setLevel(userProfile.level);
-          setNextLevelXp(userProfile.nextLevelXp || 1000);
+          setLevel(currentLevel);
+          setNextLevelXp(nextLevelXp);
           setSteps(userProfile.dailySteps || 0);
+          setTestScores(userProfile.mentalHealthTests || {});
+          await generateMentalHealthTips(userProfile.mentalHealthTests || {});
         }
       }
     } catch (error) {
@@ -65,8 +165,32 @@ const HomeScreen = () => {
     }
   }, [userId]);
 
-  const calculateProgress = () => {
-    return xp / nextLevelXp;
+  const calculateLevel = (xp) => {
+    if (xp < 1000) return 1;
+    if (xp < 9000) return Math.floor(xp / 1000) + 1;
+    return Math.floor((xp - 9000) / 1000) + 10;
+  };
+
+  const calculateLevelProgress = (xp) => {
+    const level = calculateLevel(xp);
+    if (level < 10) {
+      const levelStartXP = (level - 1) * 1000;
+      const levelEndXP = level * 1000;
+      return (xp - levelStartXP) / (levelEndXP - levelStartXP);
+    } else {
+      const levelStartXP = 9000 + (level - 10) * 1000;
+      const levelEndXP = levelStartXP + 1000;
+      return (xp - levelStartXP) / (levelEndXP - levelStartXP);
+    }
+  };
+
+  const getNextLevelXP = (currentXP) => {
+    const level = calculateLevel(currentXP);
+    if (level < 10) {
+      return level * 1000;
+    } else {
+      return 9000 + (level - 9) * 1000;
+    }
   };
 
   const handleTaskComplete = async (taskId, xpReward) => {
@@ -79,8 +203,8 @@ const HomeScreen = () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const newXp = userData.xp + xpReward;
-        const newLevel = Math.floor(newXp / 1000) + 1;
-        const newNextLevelXp = newLevel * 1000;
+        const newLevel = calculateLevel(newXp);
+        const newNextLevelXp = getNextLevelXP(newXp);
 
         await updateDoc(userRef, {
           xp: newXp,
@@ -98,6 +222,17 @@ const HomeScreen = () => {
     }
   };
 
+  if (loading || !userData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#000" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -112,7 +247,7 @@ const HomeScreen = () => {
             <Text style={styles.xpText}>{xp} / {nextLevelXp} XP</Text>
           </View>
           <ProgressBar
-            progress={calculateProgress()}
+            progress={calculateLevelProgress(xp)}
             color="#000"
             style={styles.progressBar}
           />
@@ -145,40 +280,65 @@ const HomeScreen = () => {
           </Card>
         </View>
 
-        {/* Daily Tasks Section */}
-        <View style={styles.tasksContainer}>
-          <Text style={styles.sectionTitle}>Daily Tasks</Text>
-          <Card style={styles.taskCard}>
+        {/* Mental Health Tips Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Personalized Mental Health Tips</Text>
+          <Card style={styles.tipsCard}>
             <Card.Content>
-              <View style={styles.taskRow}>
-                <View style={styles.taskInfo}>
-                  <Text style={styles.taskTitle}>Walk 10,000 steps</Text>
-                  <Text style={styles.taskReward}>+100 XP</Text>
+              {loadingTips ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#000" />
+                  <Text style={styles.loadingText}>Generating tips...</Text>
+                </View>
+              ) : (
+                <Text style={styles.tipsText}>
+                  {mentalHealthTips || 'Take a mental health assessment to get personalized tips.'}
+                </Text>
+              )}
+            </Card.Content>
+          </Card>
+        </View>
+
+        {/* Mental Health Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Mental Health Assessment</Text>
+          <Card style={styles.featureCard}>
+            <Card.Content>
+              <View style={styles.featureContent}>
+                <MaterialCommunityIcons name="brain" size={32} color="#000" />
+                <View style={styles.featureText}>
+                  <Text style={styles.featureTitle}>Mental Health Tests</Text>
+                  <Text style={styles.featureDescription}>Take assessments for Depression, Anxiety, ADHD, and PTSD</Text>
                 </View>
                 <Button
                   mode="contained"
-                  onPress={() => handleTaskComplete('walk', 100)}
-                  style={styles.taskButton}
+                  onPress={() => navigation.navigate('MentalHealth')}
+                  style={styles.featureButton}
                 >
-                  Complete
+                  Start Test
                 </Button>
               </View>
             </Card.Content>
           </Card>
+        </View>
 
-          <Card style={styles.taskCard}>
+        {/* Dietary Plan Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Dietary Plan</Text>
+          <Card style={styles.featureCard}>
             <Card.Content>
-              <View style={styles.taskRow}>
-                <View style={styles.taskInfo}>
-                  <Text style={styles.taskTitle}>Meditate for 10 minutes</Text>
-                  <Text style={styles.taskReward}>+50 XP</Text>
+              <View style={styles.featureContent}>
+                <MaterialCommunityIcons name="food-apple" size={32} color="#000" />
+                <View style={styles.featureText}>
+                  <Text style={styles.featureTitle}>Personalized Diet Plan</Text>
+                  <Text style={styles.featureDescription}>Get customized diet recommendations based on your goals</Text>
                 </View>
                 <Button
                   mode="contained"
-                  onPress={() => handleTaskComplete('meditate', 50)}
-                  style={styles.taskButton}
+                  onPress={() => navigation.navigate('DietaryPlan')}
+                  style={styles.featureButton}
                 >
-                  Complete
+                  Get Plan
                 </Button>
               </View>
             </Card.Content>
@@ -196,17 +356,19 @@ const styles = StyleSheet.create({
   },
   xpContainer: {
     padding: 20,
+    backgroundColor: '#fff',
     margin: 16,
     borderRadius: 10,
-    elevation: 4,
+    elevation: 2,
   },
   xpHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   levelText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   xpText: {
@@ -221,7 +383,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   statsCard: {
     flex: 1,
@@ -235,14 +397,14 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   statsValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   statsLabel: {
     fontSize: 14,
     color: '#666',
   },
-  tasksContainer: {
+  sectionContainer: {
     padding: 16,
   },
   sectionTitle: {
@@ -250,26 +412,46 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  taskCard: {
-    marginBottom: 12,
+  tipsCard: {
+    marginBottom: 16,
   },
-  taskRow: {
+  tipsText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#333',
+  },
+  loadingContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  loadingText: {
+    marginLeft: 12,
+    fontSize: 16,
+  },
+  featureCard: {
+    marginBottom: 16,
+  },
+  featureContent: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  taskInfo: {
+  featureText: {
     flex: 1,
+    marginLeft: 16,
+    marginRight: 16,
   },
-  taskTitle: {
+  featureTitle: {
     fontSize: 16,
+    fontWeight: 'bold',
     marginBottom: 4,
   },
-  taskReward: {
+  featureDescription: {
     fontSize: 14,
     color: '#666',
   },
-  taskButton: {
+  featureButton: {
     backgroundColor: '#000',
   },
 });

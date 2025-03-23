@@ -3,164 +3,205 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  RefreshControl,
+  Alert,
 } from 'react-native';
-import { Text, Surface, Card, Button, List, Divider } from 'react-native-paper';
+import { Text, Surface, Button, Card, Checkbox, ProgressBar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getCurrentUser } from '../services/authService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { getCurrentUser } from '../services/authService';
+import { useUser } from '../context/UserContext';
+
+const allDailyTasks = [
+  { id: 'water', title: '💧 Drink 8 glasses of water', xp: 20 },
+  { id: 'exercise', title: '🏃‍♂️ Exercise for 30 minutes', xp: 30 },
+  { id: 'meditation', title: '🧘‍♂️ Meditate for 10 minutes', xp: 20 },
+  { id: 'reading', title: '📚 Read for 30 minutes', xp: 25 },
+  { id: 'sleep', title: '😴 Get 8 hours of sleep', xp: 25 },
+  { id: 'healthy_meal', title: '🥗 Eat a healthy meal', xp: 20 },
+  { id: 'gratitude', title: '🙏 Write 3 things you\'re grateful for', xp: 15 },
+  { id: 'walk', title: '🚶‍♂️ Take a 15-minute walk', xp: 20 },
+  { id: 'stretch', title: '🤸‍♂️ Do stretching exercises', xp: 15 },
+  { id: 'journal', title: '📝 Write in your journal', xp: 20 },
+  { id: 'vitamins', title: '💊 Take your vitamins', xp: 10 },
+  { id: 'clean', title: '🧹 Clean your space', xp: 20 },
+];
 
 const TasksScreen = () => {
-  const [refreshing, setRefreshing] = useState(false);
-  const [tasks, setTasks] = useState([]);
-  const [userId, setUserId] = useState(null);
+  const { userData, updateUserData } = useUser();
+  const [dailyTasks, setDailyTasks] = useState([]);
+  const [completedTasks, setCompletedTasks] = useState({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    initializeUser();
+    loadTasks();
   }, []);
 
-  const initializeUser = async () => {
+  const loadTasks = async () => {
     try {
       const user = await getCurrentUser();
       if (user) {
-        setUserId(user.uid);
-        loadTasks();
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          const lastTaskDate = data.lastTaskDate || '2000-01-01';
+          const today = new Date().toISOString().split('T')[0];
+
+          // Only refresh tasks if:
+          // 1. It's a new day (lastTaskDate !== today)
+          // 2. OR there are no daily tasks
+          // 3. OR the date was manually changed in developer mode
+          if (lastTaskDate !== today || !data.dailyTasks || data.dailyTasks.length === 0) {
+            // Generate new random tasks
+            const shuffled = [...allDailyTasks].sort(() => 0.5 - Math.random());
+            const selected = shuffled.slice(0, 3);
+            
+            // Update Firestore with new tasks
+            await updateDoc(doc(db, 'users', user.uid), {
+              dailyTasks: selected,
+              lastTaskDate: today,
+              completedTasks: {},
+            });
+
+            // Update local state
+            setDailyTasks(selected);
+            setCompletedTasks({});
+          } else {
+            // Use existing tasks
+            setDailyTasks(data.dailyTasks || []);
+            setCompletedTasks(data.completedTasks || {});
+          }
+        }
       }
     } catch (error) {
-      console.error('Error initializing user:', error);
+      console.error('Error loading tasks:', error);
+      Alert.alert('Error', 'Failed to load tasks');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadTasks = async () => {
-    // In a real app, these would come from a backend
-    const defaultTasks = [
-      {
-        id: 'walk',
-        title: 'Walk 10,000 steps',
-        description: 'Take a walk and reach your daily step goal',
-        xp: 100,
-        icon: 'walk',
-        completed: false,
-      },
-      {
-        id: 'meditate',
-        title: 'Meditate for 10 minutes',
-        description: 'Practice mindfulness and meditation',
-        xp: 50,
-        icon: 'meditation',
-        completed: false,
-      },
-      {
-        id: 'water',
-        title: 'Drink 8 glasses of water',
-        description: 'Stay hydrated throughout the day',
-        xp: 30,
-        icon: 'water',
-        completed: false,
-      },
-      {
-        id: 'sleep',
-        title: 'Get 8 hours of sleep',
-        description: 'Maintain a healthy sleep schedule',
-        xp: 80,
-        icon: 'sleep',
-        completed: false,
-      },
-      {
-        id: 'exercise',
-        title: '30 minutes of exercise',
-        description: 'Do any form of physical activity',
-        xp: 120,
-        icon: 'run',
-        completed: false,
-      },
-    ];
-    setTasks(defaultTasks);
-  };
+  // Add effect to reload tasks when userData changes
+  useEffect(() => {
+    if (userData?.lastTaskDate) {
+      loadTasks();
+    }
+  }, [userData?.lastTaskDate]);
 
-  const onRefresh = React.useCallback(async () => {
-    setRefreshing(true);
-    await loadTasks();
-    setRefreshing(false);
-  }, []);
-
-  const handleTaskComplete = async (taskId) => {
+  const handleTaskCompletion = async (taskId, isCompleted) => {
     try {
-      if (!userId) return;
+      const user = await getCurrentUser();
+      if (!user) return;
 
-      const userRef = doc(db, 'users', userId);
+      const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
       
       if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const task = tasks.find(t => t.id === taskId);
+        const data = userDoc.data();
+        const newCompletedTasks = {
+          ...completedTasks,
+          [taskId]: isCompleted,
+        };
+
+        // Calculate XP gain
+        const task = dailyTasks.find(t => t.id === taskId);
+        const xpChange = isCompleted ? task.xp : -task.xp;
+        const currentXP = data.xp || 0;
+        const newXP = Math.max(0, currentXP + xpChange);
+
+        // Check if all tasks are completed
+        const allTasksCompleted = Object.values(newCompletedTasks).every(Boolean) && 
+                                Object.keys(newCompletedTasks).length === dailyTasks.length;
         
-        if (task && !task.completed) {
-          const newXp = userData.xp + task.xp;
-          const newLevel = Math.floor(newXp / 1000) + 1;
-          const newNextLevelXp = newLevel * 1000;
+        // Get current streak and last streak date
+        const currentStreak = data.streak || 0;
+        const lastStreakDate = data.lastStreakDate || '2000-01-01';
+        const today = new Date().toISOString().split('T')[0];
 
-          await updateDoc(userRef, {
-            xp: newXp,
-            level: newLevel,
-            nextLevelXp: newNextLevelXp,
-            totalTasksCompleted: (userData.totalTasksCompleted || 0) + 1,
-          });
+        // Update streak if all tasks are completed and it's a new day
+        let streakUpdate = {};
+        if (allTasksCompleted && lastStreakDate !== today) {
+          streakUpdate = {
+            streak: currentStreak + 1,
+            lastStreakDate: today
+          };
+        }
 
-          setTasks(tasks.map(t => 
-            t.id === taskId ? { ...t, completed: true } : t
-          ));
+        // Update Firestore with all changes
+        await updateDoc(userRef, {
+          completedTasks: newCompletedTasks,
+          xp: newXP,
+          ...streakUpdate
+        });
+
+        // Update local state
+        setCompletedTasks(newCompletedTasks);
+        
+        // Update user context with all changes
+        updateUserData({
+          xp: newXP,
+          ...streakUpdate
+        });
+
+        // Show streak increase notification
+        if (allTasksCompleted && lastStreakDate !== today) {
+          Alert.alert(
+            'Streak Increased! 🔥',
+            `Congratulations! Your streak is now ${currentStreak + 1} days!`
+          );
         }
       }
     } catch (error) {
-      console.error('Error completing task:', error);
+      console.error('Error updating task:', error);
+      Alert.alert('Error', 'Failed to update task');
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text>Loading tasks...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View style={styles.header}>
+      <ScrollView>
+        <Surface style={styles.header}>
           <Text style={styles.title}>Daily Tasks</Text>
-          <Text style={styles.subtitle}>Complete tasks to earn XP</Text>
-        </View>
+          <Text style={styles.subtitle}>Complete tasks to earn XP! 🌟</Text>
+        </Surface>
 
-        {tasks.map((task) => (
+        {dailyTasks.map((task) => (
           <Card key={task.id} style={styles.taskCard}>
             <Card.Content>
-              <View style={styles.taskHeader}>
-                <View style={styles.taskIcon}>
-                  <MaterialCommunityIcons name={task.icon} size={24} color="#000" />
-                </View>
+              <View style={styles.taskRow}>
                 <View style={styles.taskInfo}>
                   <Text style={styles.taskTitle}>{task.title}</Text>
-                  <Text style={styles.taskDescription}>{task.description}</Text>
-                </View>
-                <View style={styles.taskReward}>
-                  <MaterialCommunityIcons name="star" size={20} color="#FFD700" />
                   <Text style={styles.xpText}>+{task.xp} XP</Text>
                 </View>
+                <Checkbox
+                  status={completedTasks[task.id] ? 'checked' : 'unchecked'}
+                  onPress={() => handleTaskCompletion(task.id, !completedTasks[task.id])}
+                />
               </View>
-              <Button
-                mode="contained"
-                onPress={() => handleTaskComplete(task.id)}
-                style={[
-                  styles.completeButton,
-                  task.completed && styles.completedButton
-                ]}
-                disabled={task.completed}
-              >
-                {task.completed ? 'Completed' : 'Complete'}
-              </Button>
             </Card.Content>
           </Card>
         ))}
+
+        <Surface style={styles.progressContainer}>
+          <Text style={styles.progressText}>
+            Daily Progress: {Object.values(completedTasks).filter(Boolean).length}/{dailyTasks.length}
+          </Text>
+          <ProgressBar
+            progress={dailyTasks.length > 0 ? Object.values(completedTasks).filter(Boolean).length / dailyTasks.length : 0}
+            color="#000"
+            style={styles.progressBar}
+          />
+        </Surface>
       </ScrollView>
     </SafeAreaView>
   );
@@ -171,16 +212,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     padding: 20,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginBottom: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
@@ -190,50 +235,35 @@ const styles = StyleSheet.create({
     margin: 16,
     marginTop: 8,
   },
-  taskHeader: {
+  taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  taskIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'space-between',
   },
   taskInfo: {
     flex: 1,
+    marginRight: 16,
   },
   taskTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 4,
   },
-  taskDescription: {
+  xpText: {
     fontSize: 14,
     color: '#666',
   },
-  taskReward: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  progressContainer: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#fff',
   },
-  xpText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: 'bold',
+  progressText: {
+    fontSize: 16,
+    marginBottom: 8,
   },
-  completeButton: {
-    backgroundColor: '#000',
-  },
-  completedButton: {
-    backgroundColor: '#4CAF50',
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
   },
 });
 

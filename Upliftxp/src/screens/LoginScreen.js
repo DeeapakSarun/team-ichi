@@ -10,8 +10,7 @@ import {
 } from 'react-native';
 import { TextInput, Button, Text, Surface } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { login } from '../services/authService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -27,10 +26,9 @@ const LoginScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, email, password);
+      await login(email, password);
       // Navigation will be handled by the auth state change in AppNavigator
     } catch (error) {
-      console.error('Login error:', error);
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);

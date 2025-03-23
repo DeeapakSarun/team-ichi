@@ -2,7 +2,8 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  getAuth
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -16,16 +17,15 @@ export const signUp = async (email, password, username) => {
     await setDoc(doc(db, 'users', user.uid), {
       username,
       email,
-      level: 1,
       xp: 0,
-      totalTasksCompleted: 0,
-      streak: 0,
+      level: 1,
       createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
     });
 
     return user;
   } catch (error) {
-    throw error;
+    throw new Error(error.message);
   }
 };
 
@@ -34,7 +34,7 @@ export const login = async (email, password) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return userCredential.user;
   } catch (error) {
-    throw error;
+    throw new Error(error.message);
   }
 };
 
@@ -42,30 +42,28 @@ export const logout = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    throw error;
+    throw new Error(error.message);
   }
 };
 
 export const getCurrentUser = () => {
   return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, 
-      (user) => {
-        unsubscribe();
-        resolve(user);
-      },
-      reject
-    );
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    }, reject);
   });
 };
 
-export const getUserProfile = async (userId) => {
+export const getUserProfile = async (uid) => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', userId));
+    const userDoc = await getDoc(doc(db, 'users', uid));
     if (userDoc.exists()) {
       return userDoc.data();
     }
     return null;
   } catch (error) {
-    throw error;
+    console.error('Error getting user profile:', error);
+    return null;
   }
 }; 
