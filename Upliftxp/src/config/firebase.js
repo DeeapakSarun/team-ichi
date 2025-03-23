@@ -1,24 +1,24 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDn7FZoLrn1snqijre4V2zZQcJpsq5fbN4",
+  authDomain: "upliftxp-79a29.firebaseapp.com",
+  projectId: "upliftxp-79a29",
+  storageBucket: "upliftxp-79a29.appspot.com",
+  messagingSenderId: "575141690961",
+  appId: "1:575141690961:web:73dec01879773500094270"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Get Firebase services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+// Initialize Auth with AsyncStorage persistence
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
-export default app; 
+export const db = getFirestore(app); 
