@@ -11,7 +11,7 @@ import {
 import { Text, Surface, ProgressBar, Card, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-// import { stepService } from '../services/stepService';
+ import { stepService } from '../services/stepService';
 import { StepCounter } from './StepCounter';
 import { getCurrentUser, getUserProfile } from '../services/authService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
@@ -22,7 +22,7 @@ const HomeScreen = ({ navigation }) => {
   const { userData, loading, updateUserData } = useUser();
   const [refreshing, setRefreshing] = useState(false);
   const [stepCount, setStepCount] = useState(0);
-  // const [steps, setSteps] = useState(0);
+  const [steps, setSteps] = useState(0);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
   const [nextLevelXp, setNextLevelXp] = useState(1000);
@@ -31,12 +31,12 @@ const HomeScreen = ({ navigation }) => {
   const [loadingTips, setLoadingTips] = useState(false);
   const [testScores, setTestScores] = useState({});
 
-  // useEffect(() => {
-  //   initializeUser();
-  //   return () => {
-  //     stepService.stopTracking();
-  //   };
-  // }, []);
+  useEffect(() => {
+    initializeUser();
+    return () => {
+      stepService.stopTracking();
+    };
+  }, []);
   const updateStepCount = (newCount) => {
     setStepCount(newCount); // Update the step count state
   };
