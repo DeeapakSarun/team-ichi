@@ -10,7 +10,7 @@ A gamified health and fitness app that helps users track their physical and ment
 - Level progression system
 - Global leaderboard
 - Profile management
-- Modern and intuitive UI
+- Modern and intuitive UI.
 
 ## Tech Stack
 
